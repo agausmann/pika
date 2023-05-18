@@ -1,10 +1,11 @@
-pub mod cst;
+pub mod ast;
 pub mod token;
 
 #[cfg(test)]
 mod tests {
-    use crate::cst::module;
+    use crate::ast::module;
     use crate::token::tokenize;
+    use chumsky::Parser;
 
     fn parse_module(source: &str) {
         let tokens = tokenize().parse(source).unwrap();

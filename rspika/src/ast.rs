@@ -45,18 +45,21 @@ pub fn module() -> impl Parser<Token, Module, Error = Simple<Token>> {
             .then_ignore(just(Token::CloseBracket));
 
         let factor = choice((
-            struct_init.map(Factor::StructInit),
-            array_init.map(Factor::ArrayInit),
-            path.clone().map(Factor::Path),
-            int_literal.map(Factor::IntLiteral),
+            struct_init.map(Expr::StructInit),
+            array_init.map(Expr::ArrayInit),
+            path.clone().map(Expr::Path),
+            int_literal.map(Expr::IntLiteral),
         ));
-        let prefix_op = just(Token::Exclam).to(PrefixOp::Not);
+        let prefix_op = select! {
+            Token::Exclam => PrefixOp::Not,
+        };
         let suffix_op = choice((
             just(Token::Dot)
                 .ignore_then(ident)
                 .map(SuffixOp::FieldAccess),
             just(Token::OpenBracket)
                 .ignore_then(expr.clone())
+                .map(Box::new)
                 .then_ignore(just(Token::CloseBracket))
                 .map(SuffixOp::ArrayIndex),
         ));
@@ -64,10 +67,16 @@ pub fn module() -> impl Parser<Token, Module, Error = Simple<Token>> {
             .repeated()
             .then(factor)
             .then(suffix_op.repeated())
-            .map(|((prefixes, factor), suffixes)| Term {
-                prefixes,
-                factor,
-                suffixes,
+            .map(|((prefixes, factor), suffixes)| {
+                let mut acc = factor;
+                // Suffixes take precedence over prefixes
+                for suffix in suffixes {
+                    acc = Expr::Suffix(Box::new(acc), suffix);
+                }
+                for prefix in prefixes {
+                    acc = Expr::Prefix(prefix, Box::new(acc));
+                }
+                acc
             });
 
         let binary_op = select! {
@@ -79,7 +88,40 @@ pub fn module() -> impl Parser<Token, Module, Error = Simple<Token>> {
 
         term.clone()
             .then((binary_op.then(term)).repeated())
-            .map(|(head, tail)| Expr { head, tail })
+            .map(|(head, tail)| {
+                // Shunting yard algorithm
+                let mut output: Vec<Expr> = Vec::with_capacity(tail.len());
+                let mut operators: Vec<BinaryOp> = Vec::with_capacity(tail.len());
+                output.push(head);
+
+                for (op, rhs) in tail {
+                    loop {
+                        match operators.last() {
+                            Some(&op2)
+                                if op2.precedence() > op.precedence()
+                                    || (op2.precedence() == op.precedence()
+                                        && op.is_left_associative()) =>
+                            {
+                                let r = output.pop().unwrap();
+                                let l = output.pop().unwrap();
+                                output.push(Expr::Binary(op2, Box::new(l), Box::new(r)));
+                                operators.pop();
+                            }
+                            _ => break,
+                        }
+                    }
+                    operators.push(op);
+                    output.push(rhs);
+                }
+                while let Some(op) = operators.pop() {
+                    let r = output.pop().unwrap();
+                    let l = output.pop().unwrap();
+                    output.push(Expr::Binary(op, Box::new(l), Box::new(r)));
+                }
+
+                assert!(output.len() == 1);
+                output.pop().unwrap()
+            })
     });
 
     let type_name = recursive(|type_name| {
@@ -266,24 +308,14 @@ pub struct Block {
 }
 
 #[derive(Debug, Clone)]
-pub struct Expr {
-    pub head: Term,
-    pub tail: Vec<(BinaryOp, Term)>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Term {
-    pub prefixes: Vec<PrefixOp>,
-    pub factor: Factor,
-    pub suffixes: Vec<SuffixOp>,
-}
-
-#[derive(Debug, Clone)]
-pub enum Factor {
+pub enum Expr {
     Path(Path),
     IntLiteral(IntLiteral),
     StructInit(StructInit),
     ArrayInit(ArrayInit),
+    Prefix(PrefixOp, Box<Expr>),
+    Suffix(Box<Expr>, SuffixOp),
+    Binary(BinaryOp, Box<Expr>, Box<Expr>),
 }
 
 #[derive(Debug, Clone)]
@@ -315,15 +347,31 @@ pub enum PrefixOp {
 #[derive(Debug, Clone)]
 pub enum SuffixOp {
     FieldAccess(Ident),
-    ArrayIndex(Expr),
+    ArrayIndex(Box<Expr>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BinaryOp {
     Plus,
     Minus,
     CmpEq,
     LogicAnd,
+}
+
+impl BinaryOp {
+    fn precedence(&self) -> usize {
+        match self {
+            Self::Plus | Self::Minus => 2,
+            Self::CmpEq => 1,
+            Self::LogicAnd => 0,
+        }
+    }
+
+    fn is_left_associative(&self) -> bool {
+        match self {
+            _ => true,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
