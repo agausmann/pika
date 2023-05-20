@@ -38,8 +38,8 @@ fn bluetooth(teeth: [[[Tooth; 8]; 2]; 2]) -> i32
 }
 ```
 
-I don't know what exactly this language is going to be, but I do know what it is
-not.
+I don't know what exactly this language is going to be, but I do have some idea
+what it is not.
 
 ## The Airing of Grievances [What Pika is Not]
 
