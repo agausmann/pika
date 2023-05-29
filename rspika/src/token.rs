@@ -1,3 +1,5 @@
+use core::fmt;
+
 use chumsky::{prelude::*, text};
 
 pub fn tokenize() -> impl Parser<char, Vec<Token>, Error = Simple<char>> {
@@ -92,8 +94,60 @@ pub enum Token {
     CloseBrace,
 }
 
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let val: &dyn fmt::Display = match self {
+            Self::Ident(x) => x,
+            Self::IntLiteral(x) => x,
+            Self::Break => &"break",
+            Self::Else => &"else",
+            Self::Enum => &"enum",
+            Self::Fn => &"fn",
+            Self::For => &"for",
+            Self::If => &"if",
+            Self::In => &"in",
+            Self::Let => &"let",
+            Self::Mut => &"mut",
+            Self::Return => &"return",
+            Self::Struct => &"struct",
+            Self::RightArrow => &"->",
+            Self::Plus => &"+",
+            Self::Minus => &"-",
+            Self::Colon => &":",
+            Self::Colon2 => &"::",
+            Self::Semicolon => &";",
+            Self::Dot => &".",
+            Self::Dot2 => &"..",
+            Self::Comma => &",",
+            Self::Eq => &"=",
+            Self::Eq2 => &"==",
+            Self::And2 => &"&&",
+            Self::Exclam => &"!",
+            Self::OpenParen => &"(",
+            Self::CloseParen => &")",
+            Self::OpenBracket => &"[",
+            Self::CloseBracket => &"]",
+            Self::OpenBrace => &"{",
+            Self::CloseBrace => &"}",
+        };
+        write!(f, "{}", val)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Ident(String);
 
+impl fmt::Display for Ident {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IntLiteral(String);
+
+impl fmt::Display for IntLiteral {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
