@@ -13,9 +13,15 @@ mod tests {
         module().parse(tokens).unwrap();
     }
 
+    fn il_module(source: &str) {
+        let tokens = tokenize().parse(source).unwrap();
+        let ast = module().parse(tokens).unwrap();
+        ast.visit_il();
+    }
+
     #[test]
     fn add_two() {
-        parse_module(include_str!("examples/add_two.pika"));
+        il_module(include_str!("examples/add_two.pika"));
     }
 
     #[test]

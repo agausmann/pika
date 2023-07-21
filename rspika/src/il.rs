@@ -5,19 +5,53 @@
 
 use std::collections::HashMap;
 
-use crate::token::{Ident, IntLiteral};
+use crate::{
+    ast::Path,
+    token::{Ident, IntLiteral},
+};
 
+#[derive(Debug)]
 pub struct Module {
     pub functions: HashMap<Ident, Function>,
 }
 
+#[derive(Debug)]
 pub struct Function {
     pub assembly: Assembly,
 }
 
+#[derive(Debug)]
+pub struct Scope<'parent> {
+    parent: Option<&'parent Scope<'parent>>,
+    locals: HashMap<Path, Value>,
+}
+
+impl<'parent> Scope<'parent> {
+    pub fn new(parent: Option<&'parent Scope<'parent>>) -> Self {
+        Self {
+            parent,
+            locals: HashMap::new(),
+        }
+    }
+
+    pub fn resolve(&self, path: &Path) -> &Value {
+        self.locals
+            .get(path)
+            .or_else(|| self.parent.as_ref().map(|parent| parent.resolve(path)))
+            .unwrap()
+    }
+
+    pub fn declare(&mut self, path: Path, value: Value) {
+        assert!(!self.locals.contains_key(&path));
+        self.locals.insert(path, value);
+    }
+}
+
+#[derive(Debug)]
 pub struct Assembly {
     instructions: Vec<Instruction>,
     labels: HashMap<Label, usize>,
+    reverse_labels: HashMap<usize, Vec<Label>>,
     next_temporary: usize,
     next_label: usize,
 }
@@ -27,6 +61,7 @@ impl Assembly {
         Self {
             instructions: Vec::new(),
             labels: HashMap::new(),
+            reverse_labels: HashMap::new(),
             next_temporary: 0,
             next_label: 0,
         }
@@ -49,14 +84,31 @@ impl Assembly {
             !self.labels.contains_key(&label),
             "attempt to set label more than once"
         );
-        self.labels.insert(label, self.instructions.len());
+        let position = self.instructions.len();
+        self.labels.insert(label, position);
+        self.reverse_labels
+            .entry(position)
+            .or_insert(Vec::new())
+            .push(label);
     }
 
     pub fn push(&mut self, instr: Instruction) {
         self.instructions.push(instr)
     }
+
+    pub fn instructions(&self) -> &[Instruction] {
+        &self.instructions
+    }
+
+    pub fn labels_at(&self, position: usize) -> &[Label] {
+        self.reverse_labels
+            .get(&position)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
 }
 
+#[derive(Debug)]
 pub enum Instruction {
     Operation(Output, Operation),
     Call(Option<Output>, Call),
@@ -76,11 +128,13 @@ pub enum Instruction {
     Continuation(Continuation),
 }
 
+#[derive(Debug)]
 pub enum Operation {
     Binary(BinaryOp, Value, Value),
     Unary(UnaryOp, Value),
 }
 
+#[derive(Debug)]
 pub enum BinaryOp {
     Add,
     Sub,
@@ -100,6 +154,7 @@ pub enum BinaryOp {
     Ge,
 }
 
+#[derive(Debug)]
 pub enum UnaryOp {
     Neg,
     Not,
@@ -107,17 +162,20 @@ pub enum UnaryOp {
     Cast,
 }
 
+#[derive(Debug)]
 pub struct Call {
     // TODO function name type
     pub function_name: String,
     pub arguments: Vec<Value>,
 }
 
+#[derive(Debug)]
 pub struct Output {
     pub dest: Temporary,
     // pub dest_type: Type,
 }
 
+#[derive(Debug)]
 pub enum Continuation {
     Jump(Label),
     BranchZero(Value, Label),
@@ -143,11 +201,12 @@ pub enum Literal {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Argument(usize);
+pub struct Argument(pub usize);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Label(usize);
 
+#[derive(Debug)]
 pub enum Type {
     I8,
     I16,

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chumsky::prelude::*;
 
 use crate::{
@@ -266,9 +268,31 @@ pub struct Path {
     pub elements: Vec<Ident>,
 }
 
+impl From<Ident> for Path {
+    fn from(value: Ident) -> Self {
+        Self {
+            elements: vec![value],
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Module {
     pub items: Vec<Item>,
+}
+
+impl Module {
+    pub fn visit_il(&self) -> il::Module {
+        let mut module = il::Module {
+            functions: HashMap::new(),
+        };
+
+        for item in &self.items {
+            item.visit_il(&mut module);
+        }
+
+        module
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -276,6 +300,16 @@ pub enum Item {
     Fn(FnItem),
     Struct(StructItem),
     Enum(EnumItem),
+}
+
+impl Item {
+    pub fn visit_il(&self, module: &mut il::Module) {
+        match self {
+            Self::Fn(fnn) => fnn.visit_il(module),
+            Self::Struct(_) => todo!(),
+            Self::Enum(_) => todo!(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -289,7 +323,17 @@ pub struct FnItem {
 impl FnItem {
     pub fn visit_il(&self, module: &mut il::Module) {
         let mut assembly = il::Assembly::new();
-        self.body.visit_il(&mut assembly);
+        let mut scope = il::Scope::new(None);
+        for (i, arg) in self.args.iter().enumerate() {
+            scope.declare(
+                arg.arg_name.clone().into(),
+                il::Value::Argument(il::Argument(i)),
+            )
+        }
+        let implicit_return = self.body.visit_il(&mut scope, &mut assembly);
+        assembly.push(il::Instruction::Continuation(il::Continuation::Return(
+            implicit_return,
+        )));
         module
             .functions
             .insert(self.name.clone(), il::Function { assembly });
@@ -321,13 +365,13 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn visit_il(&self, assembly: &mut il::Assembly) -> il::Value {
+    pub fn visit_il(&self, scope: &mut il::Scope, assembly: &mut il::Assembly) -> il::Value {
         for stmt in &self.statements {
-            stmt.visit_il(assembly);
+            stmt.visit_il(scope, assembly);
         }
         self.expr
             .as_ref()
-            .map(|expr| expr.visit_il(assembly))
+            .map(|expr| expr.visit_il(scope, assembly))
             .unwrap_or(il::Value::Literal(il::Literal::Nil))
     }
 }
@@ -344,14 +388,14 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn visit_il(&self, assembly: &mut il::Assembly) -> il::Value {
+    pub fn visit_il(&self, scope: &mut il::Scope, assembly: &mut il::Assembly) -> il::Value {
         match self {
-            Self::Path(_) => todo!(),
+            Self::Path(path) => scope.resolve(path).clone(),
             Self::IntLiteral(int) => il::Value::Literal(il::Literal::Int(int.clone())),
             Self::StructInit(_) => todo!(),
             Self::ArrayInit(_) => todo!(),
             Self::Prefix(op, expr) => {
-                let expr = expr.visit_il(assembly);
+                let expr = expr.visit_il(scope, assembly);
                 let dest = assembly.new_temporary();
                 assembly.push(il::Instruction::Operation(
                     il::Output { dest },
@@ -361,8 +405,8 @@ impl Expr {
             }
             Self::Suffix(_, _) => todo!(),
             Self::Binary(op, left, right) => {
-                let left = left.visit_il(assembly);
-                let right = right.visit_il(assembly);
+                let left = left.visit_il(scope, assembly);
+                let right = right.visit_il(scope, assembly);
 
                 let dest = assembly.new_temporary();
                 assembly.push(il::Instruction::Operation(
@@ -485,17 +529,17 @@ pub enum Statement {
 }
 
 impl Statement {
-    pub fn visit_il(&self, assembly: &mut il::Assembly) {
+    pub fn visit_il(&self, scope: &mut il::Scope, assembly: &mut il::Assembly) {
         match self {
             Self::Block(block) => {
-                block.visit_il(assembly);
+                block.visit_il(scope, assembly);
             }
             Self::Let(lett) => lett.visit_il(assembly),
             Self::Assign(assign) => assign.visit_il(assembly),
-            Self::If(iff) => iff.visit_il(assembly),
+            Self::If(iff) => iff.visit_il(scope, assembly),
             Self::For(forr) => forr.visit_il(assembly),
             Self::Return(expr) => {
-                let expr = expr.visit_il(assembly);
+                let expr = expr.visit_il(scope, assembly);
                 assembly.push(il::Instruction::Continuation(il::Continuation::Return(
                     expr,
                 )));
@@ -538,7 +582,7 @@ pub struct If {
 }
 
 impl If {
-    fn visit_il(&self, assembly: &mut il::Assembly) {
+    fn visit_il(&self, scope: &mut il::Scope, assembly: &mut il::Assembly) {
         let end = if self.cases.len() > 1 || self.else_case.is_some() {
             Some(assembly.new_label())
         } else {
@@ -546,12 +590,12 @@ impl If {
         };
 
         for case in &self.cases {
-            let condition = case.condition.visit_il(assembly);
+            let condition = case.condition.visit_il(scope, assembly);
             let skip = assembly.new_label();
             assembly.push(il::Instruction::Continuation(il::Continuation::BranchZero(
                 condition, skip,
             )));
-            case.body.visit_il(assembly);
+            case.body.visit_il(scope, assembly);
             if let Some(end) = end {
                 assembly.push(il::Instruction::Continuation(il::Continuation::Jump(end)));
             }
@@ -559,7 +603,7 @@ impl If {
         }
 
         if let Some(else_case) = &self.else_case {
-            else_case.visit_il(assembly);
+            else_case.visit_il(scope, assembly);
         }
 
         if let Some(end) = end {
