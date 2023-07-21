@@ -1,4 +1,5 @@
 pub mod ast;
+pub mod il;
 pub mod token;
 
 #[cfg(test)]

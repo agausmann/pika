@@ -1,6 +1,9 @@
 use chumsky::prelude::*;
 
-use crate::token::{Ident, IntLiteral, Token};
+use crate::{
+    il,
+    token::{Ident, IntLiteral, Token},
+};
 
 pub fn module() -> impl Parser<Token, Module, Error = Simple<Token>> {
     let ident = select! {
@@ -172,18 +175,18 @@ pub fn module() -> impl Parser<Token, Module, Error = Simple<Token>> {
             .then(just(Token::Else).ignore_then(block.clone()).or_not())
             .map(|(cases, else_case)| If { cases, else_case });
 
-        let for_target = int_literal
+        let iterable = int_literal
             .then_ignore(just(Token::Dot2))
             .then(int_literal)
-            .map(|(start, end)| ForTarget::Range(start, end));
+            .map(|(start, end)| Iterable::Range(start, end));
         let for_statement = just(Token::For)
             .ignore_then(ident)
             .then_ignore(just(Token::In))
-            .then(for_target)
+            .then(iterable)
             .then(block.clone())
             .map(|((binding, target), body)| For {
                 binding,
-                target,
+                iterable: target,
                 body,
             });
         let return_statement = just(Token::Return)
@@ -283,6 +286,16 @@ pub struct FnItem {
     pub body: Block,
 }
 
+impl FnItem {
+    pub fn visit_il(&self, module: &mut il::Module) {
+        let mut assembly = il::Assembly::new();
+        self.body.visit_il(&mut assembly);
+        module
+            .functions
+            .insert(self.name.clone(), il::Function { assembly });
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct FnArg {
     pub arg_name: Ident,
@@ -307,6 +320,18 @@ pub struct Block {
     pub expr: Option<Expr>,
 }
 
+impl Block {
+    pub fn visit_il(&self, assembly: &mut il::Assembly) -> il::Value {
+        for stmt in &self.statements {
+            stmt.visit_il(assembly);
+        }
+        self.expr
+            .as_ref()
+            .map(|expr| expr.visit_il(assembly))
+            .unwrap_or(il::Value::Literal(il::Literal::Nil))
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Expr {
     Path(Path),
@@ -316,6 +341,38 @@ pub enum Expr {
     Prefix(PrefixOp, Box<Expr>),
     Suffix(Box<Expr>, SuffixOp),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
+}
+
+impl Expr {
+    pub fn visit_il(&self, assembly: &mut il::Assembly) -> il::Value {
+        match self {
+            Self::Path(_) => todo!(),
+            Self::IntLiteral(int) => il::Value::Literal(il::Literal::Int(int.clone())),
+            Self::StructInit(_) => todo!(),
+            Self::ArrayInit(_) => todo!(),
+            Self::Prefix(op, expr) => {
+                let expr = expr.visit_il(assembly);
+                let dest = assembly.new_temporary();
+                assembly.push(il::Instruction::Operation(
+                    il::Output { dest },
+                    il::Operation::Unary(op.into(), expr),
+                ));
+                il::Value::Temporary(dest)
+            }
+            Self::Suffix(_, _) => todo!(),
+            Self::Binary(op, left, right) => {
+                let left = left.visit_il(assembly);
+                let right = right.visit_il(assembly);
+
+                let dest = assembly.new_temporary();
+                assembly.push(il::Instruction::Operation(
+                    il::Output { dest },
+                    il::Operation::Binary(op.into(), left, right),
+                ));
+                il::Value::Temporary(dest)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -339,9 +396,17 @@ pub enum ArrayInit {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum PrefixOp {
     Not,
+}
+
+impl From<&PrefixOp> for il::UnaryOp {
+    fn from(value: &PrefixOp) -> Self {
+        match value {
+            PrefixOp::Not => Self::Not,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -356,6 +421,17 @@ pub enum BinaryOp {
     Minus,
     CmpEq,
     LogicAnd,
+}
+
+impl From<&BinaryOp> for il::BinaryOp {
+    fn from(value: &BinaryOp) -> Self {
+        match value {
+            BinaryOp::Plus => Self::Add,
+            BinaryOp::Minus => Self::Sub,
+            BinaryOp::CmpEq => Self::Eq,
+            BinaryOp::LogicAnd => Self::And,
+        }
+    }
 }
 
 impl BinaryOp {
@@ -408,6 +484,27 @@ pub enum Statement {
     Break,
 }
 
+impl Statement {
+    pub fn visit_il(&self, assembly: &mut il::Assembly) {
+        match self {
+            Self::Block(block) => {
+                block.visit_il(assembly);
+            }
+            Self::Let(lett) => lett.visit_il(assembly),
+            Self::Assign(assign) => assign.visit_il(assembly),
+            Self::If(iff) => iff.visit_il(assembly),
+            Self::For(forr) => forr.visit_il(assembly),
+            Self::Return(expr) => {
+                let expr = expr.visit_il(assembly);
+                assembly.push(il::Instruction::Continuation(il::Continuation::Return(
+                    expr,
+                )));
+            }
+            Self::Break => todo!(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Let {
     pub is_mut: bool,
@@ -416,16 +513,59 @@ pub struct Let {
     pub value: Expr,
 }
 
+impl Let {
+    fn visit_il(&self, assembly: &mut il::Assembly) {
+        todo!()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Assign {
     pub dest: Expr,
     pub src: Expr,
 }
 
+impl Assign {
+    fn visit_il(&self, assembly: &mut il::Assembly) {
+        todo!()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct If {
     pub cases: Vec<IfCase>,
     pub else_case: Option<Block>,
+}
+
+impl If {
+    fn visit_il(&self, assembly: &mut il::Assembly) {
+        let end = if self.cases.len() > 1 || self.else_case.is_some() {
+            Some(assembly.new_label())
+        } else {
+            None
+        };
+
+        for case in &self.cases {
+            let condition = case.condition.visit_il(assembly);
+            let skip = assembly.new_label();
+            assembly.push(il::Instruction::Continuation(il::Continuation::BranchZero(
+                condition, skip,
+            )));
+            case.body.visit_il(assembly);
+            if let Some(end) = end {
+                assembly.push(il::Instruction::Continuation(il::Continuation::Jump(end)));
+            }
+            assembly.set_label(skip);
+        }
+
+        if let Some(else_case) = &self.else_case {
+            else_case.visit_il(assembly);
+        }
+
+        if let Some(end) = end {
+            assembly.set_label(end);
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -437,11 +577,17 @@ pub struct IfCase {
 #[derive(Debug, Clone)]
 pub struct For {
     pub binding: Ident,
-    pub target: ForTarget,
+    pub iterable: Iterable,
     pub body: Block,
 }
 
+impl For {
+    fn visit_il(&self, assembly: &mut il::Assembly) {
+        todo!()
+    }
+}
+
 #[derive(Debug, Clone)]
-pub enum ForTarget {
+pub enum Iterable {
     Range(IntLiteral, IntLiteral),
 }
