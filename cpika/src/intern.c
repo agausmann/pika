@@ -63,6 +63,10 @@ IString intern_get(Intern *self, const char *value)
 
         for (size_t i = 0; i < self->capacity; i++)
         {
+            if (!self->hash_table[i].value)
+            {
+                continue;
+            }
             IString *entry = table_lookup(new_table, new_capacity, self->hash_table[i].value);
             *entry = self->hash_table[i];
         }
