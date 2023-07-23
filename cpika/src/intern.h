@@ -13,7 +13,7 @@
  */
 typedef struct
 {
-    const char *value;
+    char *value;
 } IString;
 
 /**
