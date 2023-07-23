@@ -1,5 +1,6 @@
 #include "fnv.h"
 
+// https://en.wikipedia.org/wiki/Fowler–Noll–Vo_hash_function#FNV_hash_parameters
 #define FNV_32_PRIME 0x01000193ul
 #define FNV_32_OFFSET_BASIS 0x811c9dc5ul
 #define FNV_64_PRIME 0x00000100000001B3ull
