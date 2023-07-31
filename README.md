@@ -2,7 +2,7 @@
 
 A refreshing systems programming language.
 
-Example: [`bluetooth.pika`](rspika/src/examples/kattis/bluetooth.pika)
+Example: [`bluetooth.pika`](examples/kattis/bluetooth.pika)
 
 ```
 enum Tooth {
