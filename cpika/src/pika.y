@@ -44,6 +44,7 @@
 %left "=="
 %left "+" "-"
 %left "*" "/"
+%left "."
 %precedence NEG
 
 %start module
@@ -53,12 +54,19 @@
 %%
 
 module:
-    funcdef
+    %empty
+    | defs
 
-expr:
-    IDENT
-    | INT_LITERAL
-    | expr "+" expr
+defs:
+    def
+    | defs def
+
+def:
+    structdef
+    | funcdef
+
+structdef:
+    "struct" IDENT "{" argdef_list "}"
 
 funcdef:
     "fn" IDENT "(" argdef_list ")" returntype block
@@ -79,5 +87,27 @@ returntype:
 
 block:
     "{" expr "}"
+
+expr:
+    IDENT
+    | struct_init
+    | INT_LITERAL
+    | expr "+" expr
+    | expr "-" expr
+    | expr "." IDENT
+
+struct_init:
+    IDENT "{" struct_init_arg_list "}"
+
+struct_init_arg_list:
+    struct_init_arg
+    | struct_init_arg_trailing
+
+struct_init_arg_trailing: 
+    %empty
+    | struct_init_arg ","
+
+struct_init_arg: struct_init_arg_trailing IDENT ":" expr
+
 
 %%

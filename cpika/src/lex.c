@@ -8,6 +8,10 @@ int ident_or_keyword(const char *s)
     {
         return FN;
     }
+    if (strcmp(s, "struct") == 0)
+    {
+        return STRUCT;
+    }
 
     return IDENT;
 }
