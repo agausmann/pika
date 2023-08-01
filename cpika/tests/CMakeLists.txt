@@ -1,5 +1,5 @@
 add_executable(check_intern check_intern.c)
-target_link_libraries(check_intern libcpika)
+target_link_libraries(check_intern cpika-core)
 add_test(NAME check_intern COMMAND check_intern)
 
 add_executable(check_test check_test.c)
