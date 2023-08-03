@@ -1,0 +1,30 @@
+%{
+    #include "pika.tab.h"
+%}
+
+%define hash-function-name hash_keyword
+%define lookup-function-name in_keyword_set
+%includes
+%struct-type
+%readonly-tables
+
+struct keyword_entry
+{
+    const char* name;
+    enum yytokentype keyword_type;
+};
+
+%%
+break,BREAK
+else,ELSE
+enum,ENUM
+false,FALSE
+fn,FN
+for,FOR
+if,IF
+in,IN
+let,LET
+mut,MUT
+return,RETURN
+struct,STRUCT
+true,TRUE

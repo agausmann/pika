@@ -1,17 +1,14 @@
 #include "lex.h"
 #include "pika.tab.h"
 #include <string.h>
+#include "keywords.h"
 
 int ident_or_keyword(const char *s)
 {
-    if (strcmp(s, "fn") == 0)
+    const struct keyword_entry *lookup_result = in_keyword_set(s, strlen(s));
+    if (lookup_result)
     {
-        return FN;
+        return lookup_result->keyword_type;
     }
-    if (strcmp(s, "struct") == 0)
-    {
-        return STRUCT;
-    }
-
     return IDENT;
 }
