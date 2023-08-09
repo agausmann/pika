@@ -12,8 +12,8 @@ FLEX_TARGET(
 add_library(cpika-core
     fnv.c
     intern.c
-    lex.c
     parse.c
+    parser_context.c
     ${BISON_cpika_OUTPUTS}
     ${FLEX_cpika_OUTPUTS}
 )

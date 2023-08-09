@@ -1,6 +1,10 @@
+%option reentrant
+%option bison-bridge
+%option extra-type="ParserContext*"
+
 %{
+    #include "parse.h"
     #include "pika.tab.h"
-    #include "lex.h"
 %}
 DIGIT [0-9]
 NZDIGIT [1-9]
@@ -44,8 +48,14 @@ SEP ({WHITESPACE}|{LINE_COMMENT}|{BLOCK_COMMENT})+
 "{"   { return L_BRC; }
 "}"   { return R_BRC; }
 
-{INT_LITERAL} { return INT_LITERAL; }
-{IDENT} { return ident_or_keyword(yytext); }
+{INT_LITERAL} {
+    yylval->token = ctx_intern(yyextra, yytext);
+    return INT_LITERAL;
+}
+{IDENT} {
+    yylval->token = ctx_intern(yyextra, yytext);
+    return ident_or_keyword(yytext);
+}
 
 {SEP} /* ignored */
 
