@@ -83,16 +83,16 @@ ParseExpr parse_expr_index(ParserContext *ctx, ParseExpr base, ParseExpr index);
 
 ParseExpr parse_if_expr(ParserContext *ctx, ParseIfCaseList if_case_list, ParseExpr else_block);
 ParseIfCaseList parse_if_case_start(ParserContext *ctx, ParseIfCase if_case);
-ParseIfCaseList parse_if_case_cons(ParserContext *ctx, ParseIfCaseList base, ParseIfCase if_case);
+ParseIfCaseList parse_if_case_cons(ParserContext *ctx, ParseIfCaseList base, ParseIfCase next);
 ParseIfCase parse_if_case(ParserContext *ctx, ParseExpr condition, ParseExpr block);
 
 ParseExpr parse_for_expr(ParserContext *ctx, Ident binding, ParseExpr start, ParseExpr end, ParseExpr block);
 
 ParseStructInitList parse_struct_init_start(ParserContext *ctx);
-ParseStructInitList parse_struct_init_cons(ParserContext *ctx, ParseStructInitList base, Ident ident, ParseExpr expr);
+ParseStructInitList parse_struct_init_cons(ParserContext *ctx, ParseStructInitList base, Ident field, ParseExpr value);
 
 ParsePath parse_path_start(ParserContext *ctx, Ident element);
 ParsePath parse_path_cons(ParserContext *ctx, ParsePath base, Ident element);
 
-ParsePath parse_type_path(ParserContext *ctx, ParsePath path);
+ParseType parse_type_path(ParserContext *ctx, ParsePath path);
 ParseType parse_type_array(ParserContext *ctx, ParseType element_type, IntLiteral size);
