@@ -2,11 +2,13 @@
     #include "parse.h"
     #include "pika.tab.h"
     #include "pika.yy.h"
+
+    #define ctx yyget_extra(scanner)
 %}
 
 %define api.pure
-%parse-param {ParserContext * ctx}
-%lex-param {ParserContext* ctx}
+%parse-param { void *scanner }
+%lex-param { void *scanner }
 %define parse.error detailed
 
 %token
