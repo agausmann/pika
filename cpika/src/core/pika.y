@@ -195,6 +195,7 @@ expr:
     | expr "[" expr "]" %prec "["           { $$ = parse_expr_index(ctx, $1, $3); }
     | if_expr                               { $$ = $1; }
     | for_expr                              { $$ = $1; }
+    | block                                 { $$ = $1; }
 
 maybe_expr:
     %empty      { $$ = literal_nil(ctx); }
